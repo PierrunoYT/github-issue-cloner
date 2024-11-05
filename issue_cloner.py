@@ -1,37 +1,18 @@
 import os
-import requests
-import re
 from dotenv import load_dotenv
 import time
 import webbrowser
+from github_utils import (
+    validate_token, parse_issue_url, check_issues_enabled,
+    get_source_issue, create_target_issue, get_headers,
+    GitHubError, GITHUB_API
+)
 
 # Load environment variables
 load_dotenv()
 
 # GitHub API configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-GITHUB_API = "https://api.github.com"
-
-def get_headers(token):
-    """Generate headers with the provided token."""
-    return {
-        'Authorization': f'token {token}',
-        'Accept': 'application/vnd.github.v3+json'
-    }
-
-def check_issues_enabled(token, owner, repo):
-    """Check if issues are enabled in the target repository."""
-    url = f"{GITHUB_API}/repos/{owner}/{repo}"
-    headers = get_headers(token)
-    
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"Error checking repository: {response.status_code}")
-        return False
-        
-    repo_data = response.json()
-    return repo_data.get('has_issues', False)
 
 def enable_issues_prompt(owner, repo):
     """Prompt user to enable issues and open the repository settings."""
@@ -132,6 +113,10 @@ def main():
         print("Error: GitHub token not found. Please set GITHUB_TOKEN in .env file")
         return
 
+    if not validate_token(GITHUB_TOKEN):
+        print("Error: Invalid GitHub token")
+        return
+
     # Get source issue URL from user
     issue_url = input("Please paste the GitHub issue URL you want to clone: ").strip()
     
@@ -151,29 +136,32 @@ def main():
         print(f"\nFetching issue #{issue_number} from {source_owner}/{source_repo}...")
         
         # Check if issues are enabled in target repository
-        if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
-            enable_issues_prompt(target_owner, target_repo)
-            # Check again after user action
+        try:
             if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
-                print("\nIssues are still disabled. Please enable issues and try again.")
-                return
+                enable_issues_prompt(target_owner, target_repo)
+                # Check again after user action
+                if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
+                    print("\nIssues are still disabled. Please enable issues and try again.")
+                    return
+        except GitHubError as e:
+            print(f"\nError checking issues: {str(e)}")
+            return
         
         # Get the source issue
-        issue = get_source_issue(GITHUB_TOKEN, source_owner, source_repo, issue_number)
-        if not issue:
-            print("Failed to fetch the source issue.")
+        try:
+            issue = get_source_issue(GITHUB_TOKEN, source_owner, source_repo, issue_number)
+            print(f"Cloning issue: {issue['title']}")
+        except GitHubError as e:
+            print(f"\nError fetching issue: {str(e)}")
             return
             
-        print(f"Cloning issue: {issue['title']}")
-        
         # Create the issue in target repository
-        new_issue = create_target_issue(GITHUB_TOKEN, target_owner, target_repo, issue)
-        
-        if new_issue:
+        try:
+            new_issue = create_target_issue(GITHUB_TOKEN, target_owner, target_repo, issue)
             print(f"\nSuccessfully cloned issue!")
             print(f"New issue URL: {new_issue['html_url']}")
-        else:
-            print("\nFailed to clone the issue.")
+        except GitHubError as e:
+            print(f"\nError creating issue: {str(e)}")
             
     except ValueError as e:
         print(f"Error: {str(e)}")
