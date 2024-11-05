@@ -30,26 +30,7 @@ def enable_issues_prompt(owner, repo):
     
     input("\nAfter enabling issues, press Enter to continue...")
 
-def parse_issue_url(url):
-    """Parse GitHub issue URL to extract owner, repo, and issue number."""
-    pattern = r'https://github\.com/([^/]+)/([^/]+)/issues/(\d+)'
-    match = re.match(pattern, url)
-    if not match:
-        raise ValueError("Invalid GitHub issue URL format")
-    return match.groups()
 
-def get_source_issue(token, owner, repo, issue_number):
-    """Fetch specific issue from source repository."""
-    url = f"{GITHUB_API}/repos/{owner}/{repo}/issues/{issue_number}"
-    headers = get_headers(token)
-    
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"Error fetching issue: {response.status_code}")
-        print(response.json())
-        return None
-    
-    return response.json()
 
 def get_forked_repo_details(token, original_owner, original_repo):
     """Get the user's forked repository details."""
