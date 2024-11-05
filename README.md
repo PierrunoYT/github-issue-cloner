@@ -76,7 +76,16 @@ python app.py
 
 2. Open a web browser and navigate to `http://localhost:5000`
 
-3. Enter your GitHub Personal Access Token and the issue URL you want to clone
+3. In the web interface:
+   - Enter the URL of the original GitHub issue you want to clone
+   - Enter the URL of your forked repository
+   - Click "Clone Issue" to create a copy of the issue in your forked repository
+   - The application will:
+     * Validate the issue and repository URLs
+     * Check if issues are enabled in your forked repository
+     * Copy the issue title, description, and labels
+     * Add a reference to the original issue
+     * Create a new issue in your forked repository
 
 ### CLI Interface
 
@@ -103,5 +112,11 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ## 🐛 Issues
 
 Report issues [here](https://github.com/PierrunoYT/github-issue-cloner/issues).
+
+## 🔍 Additional Notes
+
+- Ensure you have the necessary permissions to clone and create issues in the target repository
+- The application handles rate limiting and authentication securely
+- Future updates may include more advanced issue cloning features
 
 Project Link: [https://github.com/PierrunoYT/github-issue-cloner](https://github.com/PierrunoYT/github-issue-cloner)
