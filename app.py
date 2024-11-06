@@ -1,54 +1,59 @@
-import os
-from dotenv import load_dotenv
+"""Flask web application for cloning GitHub issues."""
 from flask import Flask, render_template, request, jsonify
-import logging
 from flask_cors import CORS
+import logging
+from config import GITHUB_TOKEN
 from github_utils import (
     validate_token, parse_issue_url, parse_fork_url,
     check_issues_enabled, get_source_issue, create_target_issue,
     GitHubError
 )
 
-# Load environment variables
-load_dotenv()
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# GitHub API configuration
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
 app = Flask(__name__)
 CORS(app)
 
 @app.route('/')
-def index():
+def index() -> str:
+    """Render the main page."""
     return render_template('index.html')
 
 @app.route('/clone-issue', methods=['POST'])
 def clone_issue():
-    data = request.json
-    issue_url = data.get('issue_url')
-    target_fork_url = data.get('target_fork_url')
+    """
+    Clone a GitHub issue to a target repository.
     
-    if not GITHUB_TOKEN:
-        logger.error("GitHub token not set in .env file")
-        return jsonify({'error': 'GitHub token not set in .env file'}), 400
+    Expected JSON payload:
+    {
+        "issue_url": "https://github.com/owner/repo/issues/number",
+        "target_fork_url": "https://github.com/target_owner/target_repo"
+    }
     
-    if not validate_token(GITHUB_TOKEN):
-        logger.error("Invalid GitHub token")
-        return jsonify({'error': 'Invalid GitHub token'}), 401
-    
-    if not issue_url or not target_fork_url:
-        logger.error("Missing issue URL or target fork URL")
-        return jsonify({'error': 'Missing issue URL or target fork URL'}), 400
-    
+    Returns:
+        JSON response with success message and new issue URL or error message
+    """
     try:
-        # Parse the issue URL to get components
-        source_owner, source_repo, issue_number = parse_issue_url(issue_url)
+        if not GITHUB_TOKEN:
+            logger.error("GitHub token not set in .env file")
+            return jsonify({'error': 'GitHub token not set in .env file'}), 400
         
-        # Parse the target fork URL
+        if not validate_token(GITHUB_TOKEN):
+            logger.error("Invalid GitHub token")
+            return jsonify({'error': 'Invalid GitHub token'}), 401
+        
+        data = request.json
+        issue_url = data.get('issue_url')
+        target_fork_url = data.get('target_fork_url')
+        
+        if not issue_url or not target_fork_url:
+            logger.error("Missing issue URL or target fork URL")
+            return jsonify({'error': 'Missing issue URL or target fork URL'}), 400
+        
+        # Parse URLs to get components
+        source_owner, source_repo, issue_number = parse_issue_url(issue_url)
         target_owner, target_repo = parse_fork_url(target_fork_url)
         
         # Check if issues are enabled in target repository

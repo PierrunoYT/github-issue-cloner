@@ -1,22 +1,26 @@
-import os
-import requests
-from dotenv import load_dotenv
-import time
+"""Command line interface for cloning GitHub issues."""
 import webbrowser
+import requests
+import logging
+from config import GITHUB_API, GITHUB_TOKEN, REQUEST_TIMEOUT
 from github_utils import (
     validate_token, parse_issue_url, check_issues_enabled,
     get_source_issue, create_target_issue, get_headers,
-    GitHubError, GITHUB_API
+    GitHubError
 )
 
-# Load environment variables
-load_dotenv()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# GitHub API configuration
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-
-def enable_issues_prompt(owner, repo):
-    """Prompt user to enable issues and open the repository settings."""
+def enable_issues_prompt(owner: str, repo: str) -> None:
+    """
+    Prompt user to enable issues and open the repository settings.
+    
+    Args:
+        owner: Repository owner
+        repo: Repository name
+    """
     print("\nIssues are currently disabled in your repository.")
     print("To enable issues:")
     print("1. Go to your repository settings (opening in browser)")
@@ -31,36 +35,52 @@ def enable_issues_prompt(owner, repo):
     
     input("\nAfter enabling issues, press Enter to continue...")
 
-
-
-def get_forked_repo_details(token, original_owner, original_repo):
-    """Get the user's forked repository details."""
+def get_forked_repo_details(token: str, original_owner: str, original_repo: str) -> tuple[str, str]:
+    """
+    Get the user's forked repository details.
+    
+    Args:
+        token: GitHub personal access token
+        original_owner: Original repository owner
+        original_repo: Original repository name
+        
+    Returns:
+        Tuple containing (fork_owner, fork_repo)
+        
+    Raises:
+        GitHubError: If there's an error getting fork details
+    """
     headers = get_headers(token)
     
-    # Get authenticated user's username
-    user_response = requests.get(f"{GITHUB_API}/user", headers=headers)
-    if user_response.status_code != 200:
-        print("Error fetching user information")
-        return None
-    
-    username = user_response.json()['login']
-    
-    # Check if the user has a fork of the original repository
-    forks_url = f"{GITHUB_API}/repos/{original_owner}/{original_repo}/forks"
-    forks_response = requests.get(forks_url, headers=headers)
-    
-    if forks_response.status_code != 200:
-        print("Error fetching forks")
-        return None
-    
-    forks = forks_response.json()
-    
-    # Find the user's fork
-    user_fork = next((fork for fork in forks if fork['owner']['login'] == username), None)
-    
-    if user_fork:
-        return user_fork['owner']['login'], user_fork['name']
-    else:
+    try:
+        # Get authenticated user's username
+        user_response = requests.get(
+            f"{GITHUB_API}/user",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+        if user_response.status_code != 200:
+            raise GitHubError("Error fetching user information")
+        
+        username = user_response.json()['login']
+        
+        # Check if the user has a fork of the original repository
+        forks_response = requests.get(
+            f"{GITHUB_API}/repos/{original_owner}/{original_repo}/forks",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+        
+        if forks_response.status_code != 200:
+            raise GitHubError("Error fetching repository forks")
+        
+        forks = forks_response.json()
+        user_fork = next((fork for fork in forks if fork['owner']['login'] == username), None)
+        
+        if user_fork:
+            return user_fork['owner']['login'], user_fork['name']
+        
+        # No fork found, prompt user to create one
         print(f"No fork found for {original_owner}/{original_repo} under your account.")
         fork_url = f"https://github.com/{original_owner}/{original_repo}/fork"
         print(f"Please fork the repository first: {fork_url}")
@@ -68,87 +88,53 @@ def get_forked_repo_details(token, original_owner, original_repo):
         
         # Retry getting forked repo details
         return get_forked_repo_details(token, original_owner, original_repo)
+        
+    except requests.Timeout:
+        raise GitHubError("Request timed out while getting fork details")
+    except requests.RequestException as e:
+        raise GitHubError(f"Network error while getting fork details: {str(e)}")
 
-def create_target_issue(token, target_owner, target_repo, issue_data):
-    """Create issue in target repository."""
-    url = f"{GITHUB_API}/repos/{target_owner}/{target_repo}/issues"
-    headers = get_headers(token)
-    
-    # Prepare the issue data
-    new_issue = {
-        'title': issue_data['title'],
-        'body': f"{issue_data['body']}\n\n---\n*Cloned from original issue: {issue_data['html_url']}*",
-        'labels': [label['name'] for label in issue_data.get('labels', [])],
-    }
-    
-    response = requests.post(url, headers=headers, json=new_issue)
-    if response.status_code != 201:
-        print(f"Error creating issue: {response.status_code}")
-        print(response.json())
-        return None
-    
-    return response.json()
-
-def main():
+def main() -> None:
     """Main function to clone a specific issue."""
-    if not GITHUB_TOKEN:
-        print("Error: GitHub token not found. Please set GITHUB_TOKEN in .env file")
-        return
-
-    if not validate_token(GITHUB_TOKEN):
-        print("Error: Invalid GitHub token")
-        return
-
-    # Get source issue URL from user
-    issue_url = input("Please paste the GitHub issue URL you want to clone: ").strip()
-    
     try:
+        if not GITHUB_TOKEN:
+            raise GitHubError("GitHub token not found. Please set GITHUB_TOKEN in .env file")
+
+        if not validate_token(GITHUB_TOKEN):
+            raise GitHubError("Invalid GitHub token")
+
+        # Get source issue URL from user
+        issue_url = input("Please paste the GitHub issue URL you want to clone: ").strip()
+        
         # Parse the URL to get components
         source_owner, source_repo, issue_number = parse_issue_url(issue_url)
         
         # Get forked repository details
-        target_details = get_forked_repo_details(GITHUB_TOKEN, source_owner, source_repo)
+        logger.info("Checking fork repository details...")
+        target_owner, target_repo = get_forked_repo_details(GITHUB_TOKEN, source_owner, source_repo)
         
-        if not target_details:
-            print("Could not find or create a fork of the repository.")
-            return
-        
-        target_owner, target_repo = target_details
-        
-        print(f"\nFetching issue #{issue_number} from {source_owner}/{source_repo}...")
+        logger.info(f"Fetching issue #{issue_number} from {source_owner}/{source_repo}...")
         
         # Check if issues are enabled in target repository
-        try:
+        if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
+            enable_issues_prompt(target_owner, target_repo)
+            # Check again after user action
             if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
-                enable_issues_prompt(target_owner, target_repo)
-                # Check again after user action
-                if not check_issues_enabled(GITHUB_TOKEN, target_owner, target_repo):
-                    print("\nIssues are still disabled. Please enable issues and try again.")
-                    return
-        except GitHubError as e:
-            print(f"\nError checking issues: {str(e)}")
-            return
+                raise GitHubError("Issues are still disabled. Please enable issues and try again.")
         
         # Get the source issue
-        try:
-            issue = get_source_issue(GITHUB_TOKEN, source_owner, source_repo, issue_number)
-            print(f"Cloning issue: {issue['title']}")
-        except GitHubError as e:
-            print(f"\nError fetching issue: {str(e)}")
-            return
+        issue = get_source_issue(GITHUB_TOKEN, source_owner, source_repo, issue_number)
+        logger.info(f"Cloning issue: {issue['title']}")
             
         # Create the issue in target repository
-        try:
-            new_issue = create_target_issue(GITHUB_TOKEN, target_owner, target_repo, issue)
-            print(f"\nSuccessfully cloned issue!")
-            print(f"New issue URL: {new_issue['html_url']}")
-        except GitHubError as e:
-            print(f"\nError creating issue: {str(e)}")
+        new_issue = create_target_issue(GITHUB_TOKEN, target_owner, target_repo, issue)
+        logger.info("Successfully cloned issue!")
+        logger.info(f"New issue URL: {new_issue['html_url']}")
             
-    except ValueError as e:
-        print(f"Error: {str(e)}")
+    except (ValueError, GitHubError) as e:
+        logger.error(str(e))
     except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
+        logger.error(f"An unexpected error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()
