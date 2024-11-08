@@ -7,7 +7,7 @@ from config import GITHUB_API, GITHUB_TOKEN, REQUEST_TIMEOUT
 from github_utils import (
     validate_token, parse_issue_url, check_issues_enabled,
     get_source_issue, create_target_issue, get_headers,
-    GitHubError
+    GitHubError, issue_exists
 )
 
 # Configure logging
