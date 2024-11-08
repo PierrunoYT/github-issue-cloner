@@ -2,6 +2,7 @@
 import webbrowser
 import requests
 import logging
+from typing import Tuple
 from config import GITHUB_API, GITHUB_TOKEN, REQUEST_TIMEOUT
 from github_utils import (
     validate_token, parse_issue_url, check_issues_enabled,
