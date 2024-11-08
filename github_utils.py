@@ -2,7 +2,7 @@
 import re
 import requests
 import logging
-from typing import Tuple, Dict, Optional, Any, List
+from typing import Tuple, Dict, Optional, Any, List, Union
 from config import (
     GITHUB_API, GITHUB_TOKEN, REQUEST_TIMEOUT,
     RATE_LIMIT_WARNING, HTTP_OK, HTTP_CREATED,
@@ -214,7 +214,15 @@ def _check_rate_limit(response: requests.Response) -> None:
     
     Args:
         response: Response object from GitHub API request
+        
+    Raises:
+        GitHubError: If rate limit is exceeded
     """
     remaining = response.headers.get('X-RateLimit-Remaining')
-    if remaining and int(remaining) < RATE_LIMIT_WARNING:
-        logger.warning(f"Only {remaining} GitHub API requests remaining")
+    if remaining is not None:
+        remaining = int(remaining)
+        if remaining < RATE_LIMIT_WARNING:
+            logger.warning(f"Only {remaining} GitHub API requests remaining")
+        if remaining == 0:
+            reset_time = response.headers.get('X-RateLimit-Reset', 'unknown')
+            raise GitHubError(f"GitHub API rate limit exceeded. Resets at: {reset_time}")

@@ -35,7 +35,7 @@ def enable_issues_prompt(owner: str, repo: str) -> None:
     
     input("\nAfter enabling issues, press Enter to continue...")
 
-def get_forked_repo_details(token: str, original_owner: str, original_repo: str) -> tuple[str, str]:
+def get_forked_repo_details(token: str, original_owner: str, original_repo: str) -> Tuple[str, str]:
     """
     Get the user's forked repository details.
     
@@ -105,9 +105,14 @@ def main() -> None:
 
         # Get source issue URL from user
         issue_url = input("Please paste the GitHub issue URL you want to clone: ").strip()
-        
+        if not issue_url:
+            raise ValueError("Issue URL cannot be empty")
+            
         # Parse the URL to get components
-        source_owner, source_repo, issue_number = parse_issue_url(issue_url)
+        try:
+            source_owner, source_repo, issue_number = parse_issue_url(issue_url)
+        except ValueError as e:
+            raise GitHubError(f"Invalid issue URL: {str(e)}")
         
         # Get forked repository details
         logger.info("Checking fork repository details...")
@@ -131,10 +136,13 @@ def main() -> None:
         logger.info("Successfully cloned issue!")
         logger.info(f"New issue URL: {new_issue['html_url']}")
             
-    except (ValueError, GitHubError) as e:
-        logger.error(str(e))
+    except GitHubError as e:
+        logger.error(f"GitHub error: {str(e)}")
+    except ValueError as e:
+        logger.error(f"Value error: {str(e)}")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {str(e)}")
+        logger.debug("Exception details:", exc_info=True)
 
 if __name__ == "__main__":
     main()
