@@ -53,36 +53,37 @@ def get_forked_repo_details(token: str, original_owner: str, original_repo: str)
     """
     headers = get_headers(token)
     
-    # Get authenticated user's username
-    user_response = requests.get(
-        f"{GITHUB_API}/user",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT
-    )
-    if user_response.status_code != 200:
-        raise GitHubError("Error fetching user information")
-    username = user_response.json()['login']
-    
-    while True:
-        # Check if the user has a fork of the original repository
-        repo_response = requests.get(
-            f"{GITHUB_API}/repos/{username}/{original_repo}",
+    try:
+        # Get authenticated user's username
+        user_response = requests.get(
+            f"{GITHUB_API}/user",
             headers=headers,
             timeout=REQUEST_TIMEOUT
         )
+        if user_response.status_code != 200:
+            raise GitHubError("Error fetching user information")
+        username = user_response.json()['login']
         
-        if repo_response.status_code == 200:
-            # Fork exists
-            return username, original_repo
-        elif repo_response.status_code == 404:
-            # No fork found, prompt user to create one
-            logger.info(f"No fork found for {original_owner}/{original_repo} under your account.")
-            fork_url = f"https://github.com/{original_owner}/{original_repo}/fork"
-            logger.info(f"Please fork the repository first: {fork_url}")
-            input("Press Enter after forking the repository...")
-        else:
-            raise GitHubError("Error checking for forked repository")
-        
+        while True:
+            # Check if the user has a fork of the original repository
+            repo_response = requests.get(
+                f"{GITHUB_API}/repos/{username}/{original_repo}",
+                headers=headers,
+                timeout=REQUEST_TIMEOUT
+            )
+            
+            if repo_response.status_code == 200:
+                # Fork exists
+                return username, original_repo
+            elif repo_response.status_code == 404:
+                # No fork found, prompt user to create one
+                logger.info(f"No fork found for {original_owner}/{original_repo} under your account.")
+                fork_url = f"https://github.com/{original_owner}/{original_repo}/fork"
+                logger.info(f"Please fork the repository first: {fork_url}")
+                input("Press Enter after forking the repository...")
+            else:
+                raise GitHubError("Error checking for forked repository")
+                
     except requests.Timeout:
         raise GitHubError("Request timed out while getting fork details")
     except requests.RequestException as e:

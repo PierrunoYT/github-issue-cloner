@@ -2,6 +2,7 @@
 import re
 import requests
 import logging
+from datetime import datetime
 from typing import Tuple, Dict, Optional, Any, List, Union
 from config import (
     GITHUB_API, GITHUB_TOKEN, REQUEST_TIMEOUT,
