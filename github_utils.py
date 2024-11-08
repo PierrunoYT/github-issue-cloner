@@ -188,8 +188,9 @@ def create_target_issue(token: str, target_owner: str, target_repo: str, issue_d
     
     new_issue = {
         'title': issue_data['title'],
-        'body': f"{issue_data['body']}\n\n---\n*Cloned from original issue: {issue_data['html_url']}*",
+        'body': f"{issue_data['body']}\n\n*Note: Images and attachments may not display correctly.*\n\n---\n*Cloned from original issue: {issue_data['html_url']}*",
         'labels': [label['name'] for label in issue_data.get('labels', [])],
+        'state': issue_data.get('state', 'open')
     }
     
     try:
@@ -208,6 +209,38 @@ def create_target_issue(token: str, target_owner: str, target_repo: str, issue_d
     except requests.RequestException as e:
         raise GitHubError(f"Network error while creating issue: {str(e)}")
 
+def issue_exists(token: str, owner: str, repo: str, title: str) -> bool:
+    """
+    Check if an issue with the given title exists in the repository.
+    
+    Args:
+        token: GitHub personal access token
+        owner: Repository owner
+        repo: Repository name
+        title: Issue title to check
+    
+    Returns:
+        True if an issue with the title exists, False otherwise
+    """
+    url = f"{GITHUB_API}/repos/{owner}/{repo}/issues"
+    headers = get_headers(token)
+    params = {'state': 'all', 'per_page': 100}
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+        _check_rate_limit(response)
+        
+        if response.status_code != HTTP_OK:
+            raise GitHubError(f"Failed to fetch issues: {response.status_code}")
+        
+        issues = response.json()
+        return any(issue['title'] == title for issue in issues)
+    except requests.Timeout:
+        logger.error(f"Timeout while checking for existing issues in {owner}/{repo}")
+        raise GitHubError("Request timed out while checking for existing issues")
+    except requests.RequestException as e:
+        raise GitHubError(f"Network error while checking for existing issues: {str(e)}")
+
 def _check_rate_limit(response: requests.Response) -> None:
     """
     Check remaining rate limit and log warning if low.
@@ -224,5 +257,6 @@ def _check_rate_limit(response: requests.Response) -> None:
         if remaining < RATE_LIMIT_WARNING:
             logger.warning(f"Only {remaining} GitHub API requests remaining")
         if remaining == 0:
-            reset_time = response.headers.get('X-RateLimit-Reset', 'unknown')
+            reset_timestamp = int(response.headers.get('X-RateLimit-Reset', 0))
+            reset_time = datetime.fromtimestamp(reset_timestamp).strftime('%Y-%m-%d %H:%M:%S')
             raise GitHubError(f"GitHub API rate limit exceeded. Resets at: {reset_time}")

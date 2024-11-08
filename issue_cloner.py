@@ -53,42 +53,35 @@ def get_forked_repo_details(token: str, original_owner: str, original_repo: str)
     """
     headers = get_headers(token)
     
-    try:
-        # Get authenticated user's username
-        user_response = requests.get(
-            f"{GITHUB_API}/user",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT
-        )
-        if user_response.status_code != 200:
-            raise GitHubError("Error fetching user information")
-        
-        username = user_response.json()['login']
-        
+    # Get authenticated user's username
+    user_response = requests.get(
+        f"{GITHUB_API}/user",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT
+    )
+    if user_response.status_code != 200:
+        raise GitHubError("Error fetching user information")
+    username = user_response.json()['login']
+    
+    while True:
         # Check if the user has a fork of the original repository
-        forks_response = requests.get(
-            f"{GITHUB_API}/repos/{original_owner}/{original_repo}/forks",
+        repo_response = requests.get(
+            f"{GITHUB_API}/repos/{username}/{original_repo}",
             headers=headers,
             timeout=REQUEST_TIMEOUT
         )
         
-        if forks_response.status_code != 200:
-            raise GitHubError("Error fetching repository forks")
-        
-        forks = forks_response.json()
-        user_fork = next((fork for fork in forks if fork['owner']['login'] == username), None)
-        
-        if user_fork:
-            return user_fork['owner']['login'], user_fork['name']
-        
-        # No fork found, prompt user to create one
-        print(f"No fork found for {original_owner}/{original_repo} under your account.")
-        fork_url = f"https://github.com/{original_owner}/{original_repo}/fork"
-        print(f"Please fork the repository first: {fork_url}")
-        input("Press Enter after forking the repository...")
-        
-        # Retry getting forked repo details
-        return get_forked_repo_details(token, original_owner, original_repo)
+        if repo_response.status_code == 200:
+            # Fork exists
+            return username, original_repo
+        elif repo_response.status_code == 404:
+            # No fork found, prompt user to create one
+            logger.info(f"No fork found for {original_owner}/{original_repo} under your account.")
+            fork_url = f"https://github.com/{original_owner}/{original_repo}/fork"
+            logger.info(f"Please fork the repository first: {fork_url}")
+            input("Press Enter after forking the repository...")
+        else:
+            raise GitHubError("Error checking for forked repository")
         
     except requests.Timeout:
         raise GitHubError("Request timed out while getting fork details")
@@ -131,7 +124,21 @@ def main() -> None:
         # Get the source issue
         issue = get_source_issue(GITHUB_TOKEN, source_owner, source_repo, issue_number)
         logger.info(f"Cloning issue: {issue['title']}")
-            
+
+        # Check if the issue is locked
+        if issue.get('locked', False):
+            logger.warning("The source issue is locked. Comments and interactions are limited.")
+
+        # Check if the issue is closed
+        if issue.get('state', '') == 'closed':
+            logger.info("The source issue is closed. Cloning it as a closed issue.")
+
+        # Check if the issue already exists in target repository
+        logger.info("Checking if the issue already exists in the target repository...")
+        if issue_exists(GITHUB_TOKEN, target_owner, target_repo, issue['title']):
+            logger.error("An issue with the same title already exists in the target repository.")
+            return
+
         # Create the issue in target repository
         new_issue = create_target_issue(GITHUB_TOKEN, target_owner, target_repo, issue)
         logger.info("Successfully cloned issue!")
@@ -142,8 +149,7 @@ def main() -> None:
     except ValueError as e:
         logger.error(f"Value error: {str(e)}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {str(e)}")
-        logger.debug("Exception details:", exc_info=True)
+        logger.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     main()

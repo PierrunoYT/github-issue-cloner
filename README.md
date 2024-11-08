@@ -42,11 +42,12 @@ source venv/bin/activate
 ```
 
 ### Troubleshooting Virtual Environment:
-- Ensure you have `venv` module installed
-  - On Windows: `python -m pip install virtualenv`
-  - On macOS/Linux: `python3 -m pip install virtualenv`
-- If activation fails, check Python installation
-- Verify Python version with `python --version`
+- Ensure you have Python 3.3 or above, which includes the `venv` module.
+- If you encounter issues with `venv`, you can use `virtualenv` as an alternative:
+  - Install it using `pip install virtualenv`
+  - Create a virtual environment with `virtualenv venv`
+  - Activate it using the same commands as above.
+- Verify your Python version with `python --version`.
 
 3. Install dependencies:
 ```bash
