@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Issue Cloner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f4f4f4;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .info {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GitHub Issue Cloner</h1>
+        <form id="issueCloneForm">
+            <input type="text" id="issueUrl" placeholder="Source Issue URL" required>
+            <input type="text" id="targetForkUrl" placeholder="Target Fork Repository URL" required>
+            <button type="submit">Clone Issue</button>
+        </form>
+        <div class="info">
+            <p>Note: GitHub Token must be set in the .env file</p>
+            <ul>
+                <li>Source Issue URL: Full URL of the issue to clone</li>
+                <li>Target Fork URL: Full URL of the repository to clone the issue into</li>
+            </ul>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('issueCloneForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const issueUrl = document.getElementById('issueUrl').value;
+            const targetForkUrl = document.getElementById('targetForkUrl').value;
+            const resultDiv = document.getElementById('result');
+
+            try {
+                const response = await fetch('/clone-issue', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        issue_url: issueUrl,
+                        target_fork_url: targetForkUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ${data.message}<br>
+                            <a href="${data.new_issue_url}" target="_blank">View New Issue</a>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        Network error: ${error.message}
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
